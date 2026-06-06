@@ -1,0 +1,17 @@
+ultralytics==8.2.0
+opencv-python==4.9.0.80
+supervision==0.20.0
+flask==3.0.3
+flask-socketio==5.3.6
+eventlet==0.35.2
+numpy==1.26.4
+pandas==2.2.2
+plotly==5.22.0
+twilio==9.1.0
+python-dotenv==1.0.1
+reportlab==4.2.0
+requests==2.32.2
+Pillow==10.3.0
+yt-dlp==2024.5.27
+SQLAlchemy==2.0.30
+apscheduler==3.10.4

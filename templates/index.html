@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>TrafficAI — Live Monitor</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+<style>
+  :root {
+    --bg:       #0d0f14;
+    --surface:  #161923;
+    --card:     #1e2230;
+    --border:   #2a2f42;
+    --accent:   #4f8ef7;
+    --green:    #22c55e;
+    --red:      #ef4444;
+    --amber:    #f59e0b;
+    --text:     #e2e8f0;
+    --muted:    #64748b;
+    --radius:   12px;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; font-family: 'Segoe UI', system-ui, sans-serif;
+               background: var(--bg); color: var(--text); font-size: 14px; }
+
+  /* ── Layout ── */
+  .shell    { display: grid; grid-template-rows: 56px 1fr; height: 100vh; }
+  .topbar   { display: flex; align-items: center; justify-content: space-between;
+              padding: 0 24px; background: var(--surface);
+              border-bottom: 1px solid var(--border); gap: 16px; }
+  .logo     { font-size: 18px; font-weight: 700; color: var(--accent);
+              letter-spacing: -0.5px; display: flex; align-items: center; gap: 8px; }
+  .logo span{ color: var(--text); font-weight: 400; font-size: 13px; }
+  .main     { display: grid; grid-template-columns: 1fr 340px;
+              grid-template-rows: 1fr 220px; gap: 0; overflow: hidden; }
+
+  .feed-col  { grid-row: 1 / 3; display: flex; flex-direction: column;
+               border-right: 1px solid var(--border); }
+  .right-top { overflow-y: auto; border-bottom: 1px solid var(--border); }
+  .right-bot { overflow-y: auto; }
+
+  /* ── Cards ── */
+  .card { background: var(--card); border-radius: var(--radius);
+          border: 1px solid var(--border); padding: 16px; }
+  .card-title { font-size: 11px; font-weight: 600; text-transform: uppercase;
+                letter-spacing: 0.8px; color: var(--muted); margin-bottom: 12px; }
+
+  /* ── Feed area ── */
+  .feed-header { padding: 12px 16px; background: var(--surface);
+                 border-bottom: 1px solid var(--border);
+                 display: flex; align-items: center; justify-content: space-between; }
+  .feed-body   { flex: 1; display: flex; align-items: center; justify-content: center;
+                 background: #080a0e; position: relative; overflow: hidden; }
+  #feedImg     { max-width: 100%; max-height: 100%; object-fit: contain; display: block; }
+  .feed-overlay{ position: absolute; top: 12px; right: 12px;
+                 display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
+  .badge { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px;
+           border-radius: 20px; font-size: 11px; font-weight: 600; }
+  .badge-green { background: rgba(34,197,94,0.15); color: var(--green); border: 1px solid rgba(34,197,94,0.3); }
+  .badge-red   { background: rgba(239,68,68,0.15);  color: var(--red);   border: 1px solid rgba(239,68,68,0.3); }
+  .badge-amber { background: rgba(245,158,11,0.15); color: var(--amber); border: 1px solid rgba(245,158,11,0.3); }
+  .badge-blue  { background: rgba(79,142,247,0.15); color: var(--accent); border: 1px solid rgba(79,142,247,0.3); }
+  .dot { width: 7px; height: 7px; border-radius: 50%; }
+  .dot-green { background: var(--green); animation: pulse 1.5s infinite; }
+  .dot-red   { background: var(--red); }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+  /* ── Controls ── */
+  .controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  input[type=text] { background: var(--bg); border: 1px solid var(--border);
+                     color: var(--text); border-radius: 8px; padding: 6px 10px;
+                     font-size: 13px; width: 220px; outline: none; }
+  input[type=text]:focus { border-color: var(--accent); }
+  button { border: none; border-radius: 8px; padding: 7px 14px; font-size: 13px;
+           font-weight: 600; cursor: pointer; transition: opacity .15s; }
+  button:hover { opacity: 0.85; }
+  .btn-start  { background: var(--green);  color: #fff; }
+  .btn-stop   { background: var(--red);    color: #fff; }
+  .btn-report { background: var(--accent); color: #fff; }
+  .btn-alert  { background: var(--amber);  color: #000; }
+  .btn-sm     { padding: 5px 10px; font-size: 12px; }
+
+  /* ── Stats panels (right column) ── */
+  .panels { padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+
+  /* ── Zone stat row ── */
+  .zone-row { display: flex; align-items: center; justify-content: space-between;
+              padding: 8px 0; border-bottom: 1px solid var(--border); }
+  .zone-row:last-child { border-bottom: none; }
+  .zone-name { font-weight: 600; font-size: 13px; }
+  .zone-meta { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .zone-count { font-size: 22px; font-weight: 700; color: var(--accent); }
+
+  /* ── Parking grid ── */
+  .pk-summary { display: flex; gap: 12px; margin-bottom: 10px; }
+  .pk-stat    { flex: 1; background: var(--bg); border-radius: 8px; padding: 10px;
+                text-align: center; }
+  .pk-stat .val { font-size: 22px; font-weight: 700; }
+  .pk-stat .lbl { font-size: 10px; color: var(--muted); text-transform: uppercase;
+                  letter-spacing: 0.5px; margin-top: 2px; }
+  .pk-grid    { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; }
+  .slot       { aspect-ratio: 1; border-radius: 6px; display: flex; align-items: center;
+                justify-content: center; font-size: 9px; font-weight: 700;
+                transition: background .3s; }
+  .slot-free { background: rgba(34,197,94,0.18); color: var(--green);
+               border: 1px solid rgba(34,197,94,0.35); }
+  .slot-occ  { background: rgba(239,68,68,0.18); color: var(--red);
+               border: 1px solid rgba(239,68,68,0.35); }
+  .progress-bar { height: 6px; background: var(--border); border-radius: 3px;
+                  margin-top: 8px; overflow: hidden; }
+  .progress-fill { height: 100%; border-radius: 3px; transition: width .5s; }
+
+  /* ── Charts ── */
+  .chart-wrap { height: 130px; position: relative; }
+
+  /* ── Alert log ── */
+  .alert-item { display: flex; gap: 8px; padding: 7px 0;
+                border-bottom: 1px solid var(--border); align-items: flex-start; }
+  .alert-item:last-child { border-bottom: none; }
+  .alert-time { font-size: 10px; color: var(--muted); white-space: nowrap; margin-top: 2px; }
+  .alert-msg  { font-size: 12px; line-height: 1.4; }
+
+  /* ── Footer strip ── */
+  .feed-footer { padding: 8px 16px; background: var(--surface);
+                 border-top: 1px solid var(--border);
+                 display: flex; gap: 20px; align-items: center; }
+  .metric { display: flex; flex-direction: column; align-items: center; }
+  .metric .val { font-size: 18px; font-weight: 700; color: var(--accent); line-height: 1; }
+  .metric .lbl { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+
+  /* ── Responsive ── */
+  @media (max-width: 900px) {
+    .main { grid-template-columns: 1fr; grid-template-rows: auto auto auto; }
+    .feed-col { grid-row: 1; }
+    .right-top, .right-bot { grid-column: 1; }
+  }
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <!-- ── Top bar ── -->
+  <header class="topbar">
+    <div class="logo">
+      &#9678; TrafficAI
+      <span>Live Monitor v1.0</span>
+    </div>
+    <div class="controls">
+      <input type="text" id="srcInput" placeholder="0  /  video.mp4  /  YouTube URL" value="0"/>
+      <button class="btn-start" onclick="startStream()">&#9654; Start</button>
+      <button class="btn-stop"  onclick="stopStream()">&#9632; Stop</button>
+      <button class="btn-report btn-sm" onclick="window.open('/api/report/pdf')">&#8681; PDF Report</button>
+      <button class="btn-alert  btn-sm" onclick="testAlert()">&#9888; Test Alert</button>
+    </div>
+    <div id="statusBadge" class="badge badge-red"><span class="dot dot-red"></span> Offline</div>
+  </header>
+
+  <!-- ── Main grid ── -->
+  <main class="main">
+
+    <!-- ── Video feed column ── -->
+    <div class="feed-col">
+      <div class="feed-header">
+        <span style="font-weight:600;font-size:13px;">&#128249; Live Feed</span>
+        <span id="tsLabel" style="font-size:11px;color:var(--muted);">—</span>
+      </div>
+      <div class="feed-body">
+        <img id="feedImg" src="" alt="Feed loading…"/>
+        <div class="feed-overlay">
+          <div id="fpsOverlay" class="badge badge-blue">FPS —</div>
+        </div>
+      </div>
+      <div class="feed-footer">
+        <div class="metric"><div class="val" id="totalVehicles">0</div><div class="lbl">Vehicles now</div></div>
+        <div class="metric"><div class="val" id="totalIn">0</div><div class="lbl">Total entered</div></div>
+        <div class="metric"><div class="val" id="pkFree">—</div><div class="lbl">Slots free</div></div>
+        <div class="metric"><div class="val" id="pkPct">—</div><div class="lbl">Lot occupancy</div></div>
+        <div style="flex:1"></div>
+        <div class="chart-wrap" style="width:220px;">
+          <canvas id="miniChart"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Right top: Zone stats + parking ── -->
+    <div class="right-top">
+      <div class="panels">
+
+        <!-- Zone counts -->
+        <div class="card">
+          <div class="card-title">Zone counts</div>
+          <div id="zoneList">
+            <div style="color:var(--muted);font-size:12px;">Waiting for stream…</div>
+          </div>
+        </div>
+
+        <!-- Parking grid -->
+        <div class="card">
+          <div class="card-title">Parking lot A</div>
+          <div class="pk-summary">
+            <div class="pk-stat">
+              <div class="val" id="pkOcc" style="color:var(--red)">0</div>
+              <div class="lbl">Occupied</div>
+            </div>
+            <div class="pk-stat">
+              <div class="val" id="pkFree2" style="color:var(--green)">0</div>
+              <div class="lbl">Free</div>
+            </div>
+            <div class="pk-stat">
+              <div class="val" id="pkTotal">—</div>
+              <div class="lbl">Total</div>
+            </div>
+          </div>
+          <div class="pk-grid" id="slotGrid"></div>
+          <div class="progress-bar">
+            <div class="progress-fill" id="pkProgress"
+                 style="width:0%;background:var(--green)"></div>
+          </div>
+        </div>
+
+        <!-- History chart -->
+        <div class="card">
+          <div class="card-title">Vehicle count — last 30 updates</div>
+          <div class="chart-wrap">
+            <canvas id="histChart"></canvas>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ── Right bottom: Alert log ── -->
+    <div class="right-bot">
+      <div class="panels">
+        <div class="card">
+          <div class="card-title" style="display:flex;justify-content:space-between;">
+            <span>Alert log</span>
+            <button class="btn-sm" style="background:var(--border);color:var(--text);"
+                    onclick="loadAlerts()">&#8635; Refresh</button>
+          </div>
+          <div id="alertList">
+            <div style="color:var(--muted);font-size:12px;">No alerts yet.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script>
+// ── Socket.IO ──────────────────────────────────────────────────────────────
+const socket = io();
+let isLive = false;
+
+socket.on("connect",       () => setStatus(true));
+socket.on("disconnect",    () => setStatus(false));
+socket.on("stats_update",  updateDashboard);
+
+// ── Chart setup ────────────────────────────────────────────────────────────
+const histData   = { labels: [], datasets: [] };
+const miniData   = { labels: [], datasets: [{ data: [], borderColor: "#4f8ef7",
+                     backgroundColor: "rgba(79,142,247,0.12)", tension: 0.4,
+                     fill: true, pointRadius: 0, borderWidth: 2 }] };
+const chartOpts  = (minimal) => ({
+  responsive: true, maintainAspectRatio: false, animation: { duration: 200 },
+  plugins: { legend: { display: !minimal, labels: { color: "#94a3b8", font: { size: 10 } } } },
+  scales: {
+    x: { ticks: { color: "#475569", maxTicksLimit: 6, font: { size: 9 } },
+         grid: { color: "rgba(255,255,255,0.04)" } },
+    y: { ticks: { color: "#475569", font: { size: 9 } },
+         grid: { color: "rgba(255,255,255,0.04)" },
+         beginAtZero: true },
+  },
+});
+
+const histChart = new Chart(document.getElementById("histChart"),
+  { type: "bar", data: histData, options: chartOpts(false) });
+const miniChart = new Chart(document.getElementById("miniChart"),
+  { type: "line", data: miniData, options: chartOpts(true) });
+
+const COLORS = ["#4f8ef7","#22c55e","#f59e0b","#a78bfa","#34d399"];
+const zoneColors = {};
+
+// ── Update dashboard ───────────────────────────────────────────────────────
+function updateDashboard(data) {
+  if (!data || !data.fps) return;
+  isLive = true;
+  setStatus(true);
+
+  // FPS + timestamp
+  document.getElementById("fpsOverlay").textContent = `FPS ${data.fps}`;
+  document.getElementById("tsLabel").textContent = new Date(data.timestamp).toLocaleTimeString();
+
+  // Zones
+  const zones    = data.zones || {};
+  const zoneEl   = document.getElementById("zoneList");
+  let totalNow   = 0, totalIn = 0;
+
+  // Build/update chart datasets lazily
+  const zNames = Object.keys(zones);
+  zNames.forEach((z, i) => {
+    if (!zoneColors[z]) zoneColors[z] = COLORS[i % COLORS.length];
+    if (!histData.datasets.find(d => d.label === z)) {
+      histData.datasets.push({
+        label: z, data: [], backgroundColor: zoneColors[z] + "99",
+        borderColor: zoneColors[z], borderWidth: 1,
+      });
+    }
+  });
+
+  zoneEl.innerHTML = zNames.map(z => {
+    const d = zones[z];
+    const types = Object.entries(d.types || {}).map(([k,v]) => `${v} ${k}`).join(" · ");
+    totalNow += d.current || 0;
+    totalIn  += d.total_in || 0;
+    return `<div class="zone-row">
+      <div>
+        <div class="zone-name">${z}</div>
+        <div class="zone-meta">${types || "—"} &nbsp;|&nbsp; Total entered: ${d.total_in}</div>
+      </div>
+      <div class="zone-count">${d.current}</div>
+    </div>`;
+  }).join("") || `<div style="color:var(--muted);font-size:12px;">No zones active.</div>`;
+
+  document.getElementById("totalVehicles").textContent = totalNow;
+  document.getElementById("totalIn").textContent = totalIn;
+
+  // Mini line chart
+  const nowLabel = new Date().toLocaleTimeString();
+  if (miniData.labels.length > 30) { miniData.labels.shift(); miniData.datasets[0].data.shift(); }
+  miniData.labels.push(nowLabel);
+  miniData.datasets[0].data.push(totalNow);
+  miniChart.update("none");
+
+  // History bar chart
+  if (histData.labels.length > 30) {
+    histData.labels.shift();
+    histData.datasets.forEach(d => d.data.shift());
+  }
+  histData.labels.push(nowLabel);
+  zNames.forEach(z => {
+    const ds = histData.datasets.find(d => d.label === z);
+    if (ds) ds.data.push(zones[z]?.current || 0);
+  });
+  histChart.update("none");
+
+  // Parking
+  const pk = data.parking || {};
+  const slots = pk.slots || [];
+  const grid  = document.getElementById("slotGrid");
+  grid.innerHTML = slots.map((s, i) =>
+    `<div class="slot ${s.occupied ? "slot-occ" : "slot-free"}">${s.occupied ? "●" : String(i+1)}</div>`
+  ).join("");
+
+  const summary = pk.summary || {};
+  const firstZone = Object.values(summary)[0];
+  if (firstZone) {
+    document.getElementById("pkOcc").textContent  = firstZone.occupied;
+    document.getElementById("pkFree").textContent  = firstZone.free;
+    document.getElementById("pkFree2").textContent = firstZone.free;
+    document.getElementById("pkTotal").textContent = firstZone.total;
+    document.getElementById("pkPct").textContent   = firstZone.pct + "%";
+    const pct  = firstZone.pct;
+    const fill = document.getElementById("pkProgress");
+    fill.style.width      = pct + "%";
+    fill.style.background = pct >= 85 ? "var(--red)" : pct >= 60 ? "var(--amber)" : "var(--green)";
+  }
+}
+
+// ── Video feed ─────────────────────────────────────────────────────────────
+function startFeed() {
+  const img = document.getElementById("feedImg");
+  img.src = "/video_feed?" + Date.now();
+}
+
+// ── Controls ───────────────────────────────────────────────────────────────
+async function startStream() {
+  const src = document.getElementById("srcInput").value.trim() || "0";
+  await fetch("/api/start", { method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ source: src }) });
+  setTimeout(startFeed, 800);
+  setStatus(true);
+}
+
+async function stopStream() {
+  await fetch("/api/stop", { method: "POST" });
+  document.getElementById("feedImg").src = "";
+  setStatus(false);
+}
+
+async function testAlert() {
+  await fetch("/api/test_alert", { method: "POST" });
+  setTimeout(loadAlerts, 600);
+}
+
+// ── Alert log ──────────────────────────────────────────────────────────────
+async function loadAlerts() {
+  const res  = await fetch("/api/history?hours=6");
+  const data = await res.json();
+  const el   = document.getElementById("alertList");
+  const list = data.alerts || [];
+  if (!list.length) {
+    el.innerHTML = `<div style="color:var(--muted);font-size:12px;">No alerts in last 6 hours.</div>`;
+    return;
+  }
+  el.innerHTML = list.slice(0, 12).map(a => `
+    <div class="alert-item">
+      <div class="dot" style="background:${a.sms ? "var(--green)" : "var(--amber)"}; margin-top:4px; flex-shrink:0;"></div>
+      <div>
+        <div class="alert-msg">${a.zone} — ${a.msg}</div>
+        <div class="alert-time">${new Date(a.time).toLocaleString()} ${a.sms ? "· SMS sent" : ""}</div>
+      </div>
+    </div>`).join("");
+}
+
+// ── Status badge ───────────────────────────────────────────────────────────
+function setStatus(live) {
+  const el = document.getElementById("statusBadge");
+  if (live) {
+    el.className = "badge badge-green";
+    el.innerHTML = `<span class="dot dot-green"></span> Live`;
+  } else {
+    el.className = "badge badge-red";
+    el.innerHTML = `<span class="dot dot-red"></span> Offline`;
+  }
+}
+
+// ── Init ───────────────────────────────────────────────────────────────────
+loadAlerts();
+setInterval(loadAlerts, 30000);
+</script>
+</body>
+</html>
