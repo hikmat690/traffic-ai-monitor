@@ -1,17 +1,17 @@
-# TrafficAI - Live Traffic \& Parking Monitor
+# TrafficAI - Live Traffic & Parking Monitor
 
 ### Advanced AI-powered real-time traffic analysis system
 
-!\[Python](https://img.shields.io/badge/Python-3.10+-blue)
-!\[YOLOv8](https://img.shields.io/badge/YOLOv8-Ultralytics-purple)
-!\[Flask](https://img.shields.io/badge/Flask-3.0-green)
-!\[License](https://img.shields.io/badge/License-MIT-yellow)
+![Python](https://img.shields.io/badge/Python-3.10+-blue)
+![YOLOv8](https://img.shields.io/badge/YOLOv8-Ultralytics-purple)
+![Flask](https://img.shields.io/badge/Flask-3.0-green)
+![License](https://img.shields.io/badge/License-MIT-yellow)
 
-\---
+---
 
-!\[TrafficAI Dashboard](demo.png)
+![TrafficAI Dashboard](demo.png)
 
-\---
+---
 
 ## Features
 
@@ -26,7 +26,7 @@
 * **SQLite history** - all counts and snapshots stored automatically
 * **YouTube/RTSP support** - test with any live camera stream
 
-\---
+---
 
 ## Quick Start
 
@@ -62,7 +62,7 @@ python app.py
 http://localhost:5000
 ```
 
-\---
+---
 
 ## Usage
 
@@ -74,7 +74,7 @@ http://localhost:5000
 |`rtsp://ip/stream`|IP camera|
 |YouTube URL|YouTube live stream|
 
-\---
+---
 
 ## Tech Stack
 
@@ -89,7 +89,7 @@ http://localhost:5000
 |Twilio|SMS alerts|
 |yt-dlp|YouTube stream extraction|
 
-\---
+---
 
 ## SMS Alerts (optional)
 
@@ -97,7 +97,7 @@ http://localhost:5000
 * Add your keys to `.env` file
 * Alerts fire automatically when parking lot exceeds 85%
 
-\---
+---
 
 ## License
 
