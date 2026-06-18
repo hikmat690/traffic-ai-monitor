@@ -93,9 +93,9 @@ http://localhost:5000
 
 ## SMS Alerts (optional)
 
-1. Sign up at https://www.twilio.com (free trial)
-2. Add your keys to `.env` file
-3. Alerts fire automatically when parking lot exceeds 85%
+* Sign up at https://www.twilio.com (free trial)
+* Add your keys to `.env` file
+* Alerts fire automatically when parking lot exceeds 85%
 
 \---
 
